@@ -1,0 +1,42 @@
+# Render Blueprint
+# روی Render از نوع Web Service بسازید (رایگان)
+# ربات تلگرام در یک thread جداگانه اجرا می‌شود
+# و Flask یک health-check ساده روی پورت Render ارائه می‌دهد.
+
+services:
+  - type: web
+    name: silentmovie
+    runtime: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    healthCheckPath: /
+    healthCheckInterval: 30
+    # متغیرهای محیطی را در داشبورد Render تنظیم کنید:
+    #  - BOT_TOKEN
+    #  - ADMIN_IDS
+    #  - SITE_MOBILE
+    #  - SITE_PASSWORD
+    #  - TELEGRAM_PROXY  (روی Render خالی بگذارید)
+    #
+    # دیتابیس PostgreSQL (اختیاری):
+    #  - DATABASE_URL  (مثلا postgres://avnadmin:PASSWORD@HOST:PORT/defaultdb?sslmode=require)
+    #    اگر تنظیم شود، از PostgreSQL استفاده می‌شود. در غیر این‌صورت SQLite.
+    #
+    # تنظیمات آرشیو ایرانی:
+    #  - USE_SELENIUM_FOR_ARCHIVE  (پیش‌فرض: false)
+    #    اگر true باشد، ربات از Selenium + Chrome برای بارگذاری کامل آرشیو استفاده می‌کند.
+    #    نکته: روی Render free tier (512MB RAM) این باعث OOM می‌شود!
+    #    پیشنهاد: روی Render false بگذارید (پیش‌فرض)، فقط صفحه اول نمایش داده می‌شود.
+    #  - ENABLE_PRELOAD  (پیش‌فرض: false)
+    #    اگر true باشد، ربات هنگام استارت آرشیو را در پس‌زمینه بارگذاری می‌کند.
+    #    نکته: این هم به Selenium نیاز دارد و روی Render توصیه نمی‌شود.
+    envVars:
+      - key: ENABLE_PRELOAD
+        value: false
+      - key: USE_SELENIUM_FOR_ARCHIVE
+        value: false
+      # DATABASE_URL را در داشبورد Render به‌صورت Secret اضافه کنید
+      # - key: DATABASE_URL
+      #   sync: false

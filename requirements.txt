@@ -1,0 +1,15 @@
+python-telegram-bot[job-queue]
+requests[socks]
+numpy
+Pillow
+Flask
+beautifulsoup4
+psycopg2-binary
+urllib3<2
+# Selenium اختیاری است — فقط وقتی USE_SELENIUM_FOR_ARCHIVE=true باشد استفاده می‌شود
+# نکته: روی Render free tier (512MB) نصب Chrome + Selenium باعث OOM می‌شود
+# اگر روی VPS با RAM زیاد هستید و می‌خواهید همه‌ی فیلم‌های آرشیو را بگیرید:
+#   1. این خط را فعال کنید: selenium
+#   2. Chrome را نصب کنید
+#   3. متغیر USE_SELENIUM_FOR_ARCHIVE=true را تنظیم کنید
+#selenium

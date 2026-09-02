@@ -1,0 +1,7 @@
+# پکیج‌های لازم برای اجرای sync_archive.py
+# این فایل را فقط روی کامپیوتر خودتان نصب کنید (نه روی Render)
+selenium
+beautifulsoup4
+requests
+psycopg2-binary
+webdriver-manager

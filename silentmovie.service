@@ -1,0 +1,16 @@
+[Unit]
+Description=SilentMovie Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# مسیر پوشه‌ی ربات را در صورت نیاز اصلاح کنید:
+WorkingDirectory=/root/bot
+ExecStart=/root/bot/venv/bin/python /root/bot/bot.py
+Restart=always
+RestartSec=5
+# لاگ‌ها در journald ذخیره می‌شوند: journalctl -u silentmovie -f
+
+[Install]
+WantedBy=multi-user.target
