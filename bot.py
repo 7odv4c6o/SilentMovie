@@ -168,22 +168,43 @@ def get_movie_cached(movie_id: str) -> Movie:
 
 
 async def download_bytes(url: str) -> Optional[bytes]:
-    """دانلود پوستر در ترد جداگانه — با سشن سایت و پشتیبانی از فرمت‌های مختلف."""
+    """دانلود پوستر در ترد جداگانه — با سشن سایت و پشتیبانی از فرمت‌های مختلف.
+
+    ترتیب تلاش‌ها:
+      ۱) با سشن فعلی سایت (عکس ممکنه پشت لاگین باشه)
+      ۲) لاگین مجدد و تلاش دوباره (اگر سشن منقضی شده بود)
+      ۳) بدون سشن (برای CDN عمومی)
+    """
     def _dl():
+        # ۱) تلاش با سشن فعلی
         try:
-            # اول سشن سایت را امتحان کن (عکس ممکنه پشت لاگین باشه)
             if site and site.s.cookies:
                 r = site.s.get(url, headers={"User-Agent": UA, "Referer": BASE},
                                timeout=25, verify=False)
                 if r.status_code == 200 and len(r.content) > 2000:
                     return r.content
-            # بعد بدون سشن (CDN عمومی)
+                log.warning("دانلود پوستر با سشن ناموفق (HTTP %s، %d bytes): %s",
+                            r.status_code, len(r.content), url[:100])
+        except Exception as e:
+            log.warning("دانلود پوستر با سشن خطا داد: %s", e)
+        # ۲) لاگین مجدد و تلاش دوباره
+        try:
+            if site and site.ensure_login():
+                r = site.s.get(url, headers={"User-Agent": UA, "Referer": BASE},
+                               timeout=25, verify=False)
+                if r.status_code == 200 and len(r.content) > 2000:
+                    log.info("پوستر بعد از لاگین مجدد دانلود شد (%d bytes)", len(r.content))
+                    return r.content
+        except Exception as e:
+            log.warning("دانلود پوستر بعد از لاگین مجدد هم ناموفق: %s", e)
+        # ۳) بدون سشن (CDN عمومی)
+        try:
             r = requests.get(url, headers={"User-Agent": UA, "Referer": BASE},
                              timeout=25, verify=False)
             if r.status_code == 200 and len(r.content) > 2000:
                 return r.content
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("دانلود پوستر بدون سشن هم ناموفق: %s", e)
         return None
     return await asyncio.to_thread(_dl)
 
@@ -383,6 +404,8 @@ async def _show_movie_card_from_message(update: Update,
             except (BadRequest, TelegramError) as e:
                 log.warning("ارسال پوستر با bytes ناموفق (deeplink): %s", e)
     if not sent:
+        log.warning("پوستر در مسیر دیپ‌لینک ارسال نشد برای فیلم %s — poster='%s'، user=%s",
+                    movie_id, (movie.poster or "")[:100], update.effective_user.id)
         await msg.reply_html(caption[:4096], reply_markup=markup)
 
 
@@ -690,7 +713,8 @@ async def show_movie_card(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     # روش ۳: بدون عکس (فقط متن)
     if not sent:
-        log.warning("پوستر ارسال نشد برای فیلم %s — poster='%s'", movie_id, (movie.poster or "")[:100])
+        log.warning("پوستر ارسال نشد برای فیلم %s — poster='%s'، user=%s",
+                    movie_id, (movie.poster or "")[:100], update.effective_user.id)
         await q.message.reply_html(caption[:4096], reply_markup=markup)
 
 
@@ -1128,8 +1152,27 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                                 caption=caption[:1024], parse_mode=ParseMode.HTML,
                                 reply_markup=markup)
                             sent = True
-                        except (BadRequest, TelegramError):
-                            pass
+                        except (BadRequest, TelegramError) as e:
+                            log.warning("ارسال پوستر با URL ناموفق در checkjoin: %s", e)
+                        if not sent:
+                            # روش ۲: دانلود دستی با سشن سایت و ارسال bytes
+                            poster_bytes = await download_bytes(movie.poster)
+                            if poster_bytes:
+                                try:
+                                    ext = ".jpg"
+                                    if poster_bytes[:4] == b"RIFF":
+                                        ext = ".webp"
+                                    elif poster_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+                                        ext = ".png"
+                                    await context.bot.send_photo(
+                                        q.message.chat_id,
+                                        photo=InputFile(io.BytesIO(poster_bytes),
+                                                        filename=f"{pending_movie_id}{ext}"),
+                                        caption=caption[:1024], parse_mode=ParseMode.HTML,
+                                        reply_markup=markup)
+                                    sent = True
+                                except (BadRequest, TelegramError) as e:
+                                    log.warning("ارسال پوستر با bytes هم ناموفق در checkjoin: %s", e)
                     if not sent:
                         await context.bot.send_message(
                             q.message.chat_id, caption[:4096],
@@ -1157,7 +1200,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await on_admin_callback(update, context, data[4:])
         return
 
-    # دستورات نیازمند عضویت
+    # دستورات نیازمند عضویت (چک مستقل — نباید با elif به زنجیره‌ی دستورات وصل شود!
+    # وگرنه برای کاربر عادیِ عضو، هیچ شاخه‌ای اجرا نمی‌شود و دکمه‌ها «گیر می‌کنند»)
     if not db.is_admin(u.id):
         missing = await is_member_all_channels(u.id, context)
         if missing:
@@ -1166,7 +1210,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
 
     # انتخاب فصل
-    elif data.startswith("season:"):
+    if data.startswith("season:"):
         parts = data.split(":")
         movie_id = parts[1]
         season_val = parts[2]
